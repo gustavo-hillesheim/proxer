@@ -1,6 +1,6 @@
 import { http } from "./dependencies.ts";
 
-export function startProxyServer(
+export async function startProxyServer(
   { hostname, port } = { hostname: "0.0.0.0", port: 80 }
 ) {
   const server = http.serve({ hostname, port });
