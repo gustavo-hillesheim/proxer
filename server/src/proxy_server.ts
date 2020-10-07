@@ -1,123 +1,158 @@
 import { http } from "./dependencies.ts";
+import { WebSocketServerAdapter } from "./websocket_server.ts";
 
-export async function startProxyServer(
-  { hostname, port } = { hostname: "0.0.0.0", port: 80 }
-) {
+export interface ProxyServerArgs {
+  hostname?: string;
+  port?: number;
+  websocketServer: WebSocketServerAdapter;
+}
+
+export async function startProxyServer({
+  hostname = "0.0.0.0",
+  port = 80,
+  websocketServer,
+}: ProxyServerArgs) {
   const server = http.serve({ hostname, port });
   console.log(`Started proxy server. Access it at: http://${hostname}:${port}`);
 
   for await (const request of server) {
     console.log("=================================");
     console.log("Received request to:", request.url);
-    handleRequest(request);
+    const requestHandler = new ProxyRequestHandler(websocketServer, request);
+    requestHandler.handleRequest();
   }
 }
 
-interface RedirectRequest {
+interface RequestDetails {
   method: string;
   url: string;
-  headers: Headers;
+  headers: Record<string, string>;
   body: string | Uint8Array;
 }
 
 interface RedirectResponse {
   status: number;
-  headers: Headers;
+  headers: Record<string, string>;
   body: string;
 }
 
-async function handleRequest(request: http.ServerRequest): Promise<void> {
-  const redirectDetails = await extractDetails(request);
-  if (redirectDetails.url.startsWith("http")) {
-    redirectRequest(redirectDetails, request);
-  }
-}
+class ProxyRequestHandler {
+  private static requestIdSequence = 1;
+  private sender: string | undefined;
+  private requestId: number;
 
-function redirectRequest(
-  redirectRequest: RedirectRequest,
-  request: http.ServerRequest
-): void {
-  sendRequest(redirectRequest).then((response) => {
-    request.respond({
-      status: response.status,
-      headers: response.headers,
-      body: response.body,
+  constructor(
+    private websocketServer: WebSocketServerAdapter,
+    private request: http.ServerRequest
+  ) {
+    this.sender = (request.conn.remoteAddr as any)["hostname"];
+    this.requestId = ProxyRequestHandler.requestIdSequence++;
+  }
+
+  async handleRequest(): Promise<void> {
+    const requestDetails = await this.extractDetails();
+
+    if (requestDetails.url.startsWith("http")) {
+      this.websocketServer.send({
+        receiver: this.sender,
+        type: "received-request",
+        content: {
+          requestId: this.requestId,
+          request: requestDetails,
+        },
+      });
+      this.redirectRequest(requestDetails);
+    }
+  }
+
+  redirectRequest(requestDetails: RequestDetails): void {
+    this.sendRequest(requestDetails).then((response) => {
+      this.websocketServer.send({
+        receiver: this.sender,
+        type: "received-response",
+        content: {
+          requestId: this.requestId,
+          response: {
+            status: response.status,
+            headers: response.headers,
+            body: response.body,
+          },
+        },
+      });
+      this.request.respond({
+        status: response.status,
+        headers: new Headers(response.headers),
+        body: response.body,
+      });
     });
-  });
-}
-
-function sendRequest({
-  url,
-  headers,
-  body,
-  method,
-}: RedirectRequest): Promise<RedirectResponse> {
-  console.debug("Sending request to", url);
-  return fetch(url, { headers, body, method }).then(async (response) => {
-    console.debug(`${url} responded with status ${response.status}`);
-
-    const body = await readResponseBody(response);
-    const status = response.status;
-    const headers = response.headers;
-
-    return { status, headers, body };
-  });
-}
-
-async function extractDetails(
-  request: http.ServerRequest
-): Promise<RedirectRequest> {
-  const method = request.method;
-  const url = request.url.substring(1);
-  const headers = createRedirectHeaders(request);
-  const body = await readRequestBodyBytes(request);
-  return { url, headers, body, method };
-}
-
-async function readResponseBody(response: Response): Promise<string> {
-  const body = await response.text();
-  return body;
-}
-
-async function readRequestBodyBytes(
-  request: http.ServerRequest
-): Promise<Uint8Array> {
-  const bodyBytes = await Deno.readAll(request.body);
-  return bodyBytes;
-}
-
-async function readRequestBodyString(
-  request: http.ServerRequest
-): Promise<string> {
-  const bodyBytes = await readRequestBodyBytes(request);
-  return new TextDecoder(getBodyCharset(request)).decode(bodyBytes);
-}
-
-function createRedirectHeaders(request: http.ServerRequest): Headers {
-  const redirectHeaders = new Headers();
-  for (const header in request.headers.keys()) {
-    const headerValue = request.headers.get(header) as string;
-    redirectHeaders.set(header, headerValue);
   }
-  return redirectHeaders;
-}
 
-function getBodyCharset(request: http.ServerRequest): string {
-  const contentType = request.headers.get("Content-Type");
-  const defaultCharset = "utf-8";
-  if (!contentType) {
-    return defaultCharset;
-  }
-  const specifiesCharset = contentType.includes("charset");
-  const charset = specifiesCharset ? getCharset(contentType) : defaultCharset;
-  return charset || defaultCharset;
-}
+  sendRequest({
+    url,
+    headers,
+    body,
+    method,
+  }: RequestDetails): Promise<RedirectResponse> {
+    console.debug("Sending request to", url);
+    return fetch(url, { headers: new Headers(headers), body, method }).then(
+      async (response) => {
+        console.debug(`${url} responded with status ${response.status}`);
 
-function getCharset(contentType: string): string | null {
-  const charsetRegex: RegExp = /charset=([^;]+)/g;
-  const matches = charsetRegex.exec(contentType);
-  if (matches && matches.length > 1) {
-    return matches[1];
+        const body = await this.readResponseBody(response);
+        const status = response.status;
+        const headers = Object.fromEntries(response.headers);
+
+        return { status, headers, body };
+      }
+    );
   }
-  return null;
+
+  async extractDetails(): Promise<RequestDetails> {
+    const method = this.request.method;
+    const url = this.request.url.substring(1);
+    const headers = this.createRedirectHeaders();
+    const body = await this.readRequestBodyString();
+    return { url, headers, body, method };
+  }
+
+  async readResponseBody(response: Response): Promise<string> {
+    const body = await response.text();
+    return body;
+  }
+
+  async readRequestBodyBytes(): Promise<Uint8Array> {
+    const bodyBytes = await Deno.readAll(this.request.body);
+    return bodyBytes;
+  }
+
+  async readRequestBodyString(): Promise<string> {
+    const bodyBytes = await this.readRequestBodyBytes();
+    return new TextDecoder(this.getBodyCharset()).decode(bodyBytes);
+  }
+
+  createRedirectHeaders(): Record<string, string> {
+    return Object.fromEntries(this.request.headers);
+  }
+
+  getBodyCharset(): string {
+    const contentType = this.request.headers.get("Content-Type");
+    const defaultCharset = "utf-8";
+    if (!contentType) {
+      return defaultCharset;
+    }
+    const specifiesCharset = contentType.includes("charset");
+    const charset = specifiesCharset
+      ? this.getCharset(contentType)
+      : defaultCharset;
+    return charset || defaultCharset;
+  }
+
+  getCharset(contentType: string): string | null {
+    const charsetRegex: RegExp = /charset=([^;]+)/g;
+    const matches = charsetRegex.exec(contentType);
+    if (matches && matches.length > 1) {
+      return matches[1];
+    }
+    return null;
+  }
 }
