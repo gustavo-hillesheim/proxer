@@ -1,13 +1,13 @@
 import { Plugin, Store } from "vuex";
 
-type WebSocketConnectionArgs = {
+type WebSocketPluginArgs = {
   host: string;
   port: number;
   protocol: string | undefined;
 };
 
 export function websocketPlugin(
-  connectionArgs: WebSocketConnectionArgs = {
+  connectionArgs: WebSocketPluginArgs = {
     host: "127.0.0.1",
     port: 10001,
     protocol: undefined,
@@ -18,7 +18,7 @@ export function websocketPlugin(
 
   return (store: Store<any>) => {
     adapter.onMessage((message) => {
-      store.commit("receiveMessage", message);
+      store.dispatch("receiveMessage", message);
     });
   };
 }
@@ -27,7 +27,7 @@ function connectWebsocket({
   host,
   port,
   protocol,
-}: WebSocketConnectionArgs): WebSocket {
+}: WebSocketPluginArgs): WebSocket {
   const url = `ws://${host}:${port}`;
   return new WebSocket(url, protocol);
 }

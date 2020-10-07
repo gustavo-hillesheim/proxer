@@ -1,8 +1,10 @@
 <template>
   <div class="home">
-    <span v-for="(message, index) in messages" :key="index">
-      {{ message }}
-    </span>
+    <ProxyRequest
+      :request="request"
+      v-for="request in requests"
+      :key="request.id"
+    />
   </div>
 </template>
 
@@ -10,9 +12,12 @@
 import Vue from "vue";
 import { mapState } from "vuex";
 
+import ProxyRequest from "../components/organisms/ProxyRequest.vue";
+
 export default Vue.extend({
   name: "HomePage",
-  computed: mapState(["messages"]),
+  components: { ProxyRequest },
+  computed: mapState(["requests"]),
 });
 </script>
 <style lang="sass" scoped>
