@@ -16,18 +16,21 @@ export default new Vuex.Store({
   mutations: {
     receivedRequest(
       state,
-      { id, request }: RequestDetailsMessage
+      { requestId: id, request }: RequestDetailsMessage
     ): void | never {
       console.debug(`Received request of id ${id} to url ${request.url}`);
       if (state.requests[id]) {
         throw new Error(`Request of id ${id} already exists!`);
       }
       Vue.set(state.requests, id, {
-        id,
+        requestId: id,
         requestDetails: request,
       });
     },
-    receivedResponse(state, { id, response }: ResponseDetailsMessage): void {
+    receivedResponse(
+      state,
+      { requestId: id, response }: ResponseDetailsMessage
+    ): void {
       console.debug(`Received response for request of id ${id}`);
       if (state.requests[id]) {
         Vue.set(state.requests[id], "responseDetails", response);

@@ -28,7 +28,7 @@ interface RequestDetails {
   url: string;
   headersRecord: Record<string, string>;
   headers: Headers;
-  body: string | Uint8Array;
+  body: string;
 }
 
 interface ResponseDetails {
@@ -94,7 +94,7 @@ class ProxyRequestHandler {
   private notifyRequestReceived(request: RequestDetails): void {
     this.websocketServer.send({
       receiver: this.sender,
-      type: "received-request",
+      type: "receivedRequest",
       content: {
         requestId: this.requestId,
         request: {
@@ -110,7 +110,7 @@ class ProxyRequestHandler {
   private notifyResponseReceived(response: ResponseDetails): void {
     this.websocketServer.send({
       receiver: this.sender,
-      type: "received-response",
+      type: "receivedResponse",
       content: {
         requestId: this.requestId,
         response: {

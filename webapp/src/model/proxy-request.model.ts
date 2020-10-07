@@ -12,17 +12,17 @@ export interface ResponseDetails {
 }
 
 export interface ProxyRequestInfo {
-  id: number;
+  requestId: number;
   requestDetails: RequestDetails;
   responseDetails?: ResponseDetails;
 }
 
 export interface RequestDetailsMessage {
-  id: number;
+  requestId: number;
   request: RequestDetails;
 }
 
 export interface ResponseDetailsMessage {
-  id: number;
+  requestId: number;
   response: ResponseDetails;
 }

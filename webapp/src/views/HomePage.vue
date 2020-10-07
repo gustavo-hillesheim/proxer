@@ -1,10 +1,12 @@
 <template>
   <div class="home">
-    <ProxyRequest
-      :request="request"
-      v-for="request in requests"
-      :key="request.id"
-    />
+    <v-expansion-panels multiple accordion>
+      <ProxyRequest
+        :request="request"
+        v-for="request in requests"
+        :key="request.id"
+      />
+    </v-expansion-panels>
   </div>
 </template>
 

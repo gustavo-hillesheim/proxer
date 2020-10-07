@@ -32,7 +32,7 @@ export class WebSocketServerAdapter {
   }
 
   private sendTo(receiver: string, message: WebSocketMessage): void {
-    this.server.clients.forEach((client) => {
+    this.activeClients().forEach((client) => {
       if (this.isClient(receiver, client)) {
         client.send(JSON.stringify(message));
       }
@@ -40,9 +40,13 @@ export class WebSocketServerAdapter {
   }
 
   private sendAll(message: WebSocketMessage): void {
-    this.server.clients.forEach((client) => {
+    this.activeClients().forEach((client) => {
       client.send(JSON.stringify(message));
     });
+  }
+
+  private activeClients(): websocket.WebSocket[] {
+    return Array.from(this.server.clients).filter((client) => !client.isClosed);
   }
 
   private isClient(receiver: string, client: websocket.WebSocket): boolean {
