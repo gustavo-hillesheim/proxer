@@ -6,16 +6,28 @@
     </v-tabs>
     <v-tabs-items v-model="tabs">
       <v-tab-item>
-        {{ message.body }}
+        <pre class="message-body" v-if="message.body">{{ body }}</pre>
+        <div class="empty" v-else>
+          <v-alert outlined type="info">
+            A requisição não possui body
+          </v-alert>
+        </div>
       </v-tab-item>
       <v-tab-item>
-        <v-data-table
-          dense
-          :headers="headersTableHeaders"
-          :items="headersList"
-          item-key="name"
-        >
-        </v-data-table>
+        <v-simple-table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="header in headers" :key="header.name">
+              <td class="text-start">{{ header.name }}</td>
+              <td class="text-start">{{ header.value }}</td>
+            </tr>
+          </tbody>
+        </v-simple-table>
       </v-tab-item>
     </v-tabs-items>
   </div>
@@ -33,26 +45,39 @@ export default Vue.extend({
   },
   data: () => ({
     tabs: null,
-    headersTableHeaders: [
-      {
-        text: "Name",
-        value: "name",
-        align: "start",
-      },
-      {
-        text: "Value",
-        value: "value",
-        align: "start",
-      },
-    ],
   }),
   computed: {
-    headersList() {
+    headers() {
       return Object.entries(this.message.headers).map(([name, value]) => ({
         name,
         value,
       }));
     },
+    body(): string {
+      try {
+        return JSON.stringify(JSON.parse((this.message as any).body), null, 2);
+      } catch {
+        return (this.message as any).body;
+      }
+    },
   },
 });
 </script>
+<style lang="sass" scoped>
+.empty
+  padding: 16px
+
+.text-start
+  text-align: start
+
+.message-body
+  text-align: start
+  padding: 8px
+  overflow: auto
+
+.v-data-table, .message-body
+  background-color: #f8f8f8 !important
+  border: 1px solid #f2f2f2
+  max-height: 500px
+  overflow: auto
+</style>
